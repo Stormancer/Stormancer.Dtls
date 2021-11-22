@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\dotnet\Stormancer.Dtls\Stormancer.Dtls.csproj" />
+    <ProjectReference Include="..\Stormancer.Dtls\Stormancer.Dtls.csproj" />
   </ItemGroup>
 
 </Project>

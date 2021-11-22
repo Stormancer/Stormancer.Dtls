@@ -8,17 +8,34 @@ using System.Threading.Tasks;
 
 namespace Stormancer.Dtls
 {
-    public class PmtuDiscovery
+    public class HeartbeatService
     {
+        private readonly DtlsConnectionState connectionState;
+        private readonly DtlsRecordLayer recordLayer;
 
-        public static async Task<int> DiscoverMtu(IPAddress ipAddress)
+        public HeartbeatService(DtlsConnectionState connectionState, DtlsRecordLayer recordLayer)
         {
-            var ping = new Ping();
+            this.connectionState = connectionState;
+            this.recordLayer = recordLayer;
+        }
 
-            var reply = await ping.SendPingAsync(ipAddress, 1000, new byte[10], new PingOptions() { DontFragment = true});
+        /// <summary>
+        /// Gets the currently calculated PMTU
+        /// </summary>
+        /// <remarks>
+        /// The PMTU is regularly updated, 
+        /// The PMTU can change
+        /// </remarks>
+        
 
+        public async Task Start(CancellationToken cancellationToken)
+        {
+            var testMtu = 60;
+            while (!cancellationToken.IsCancellationRequested)
+            {
 
-            return 0;
+                
+            }
         }
 
 
