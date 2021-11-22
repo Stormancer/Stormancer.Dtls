@@ -34,15 +34,15 @@ namespace Stormancer.Dtls
         private Channel<Datagram> _sendChannel = Channel.CreateUnbounded<Datagram>();
         private Channel<Datagram> _receiveChannel = Channel.CreateUnbounded<Datagram>();
 
-        private Dictionary<IPEndPoint, DtlsConnectionState> _connections = new Dictionary<IPEndPoint, DtlsConnectionState>();
+        private Dictionary<IPEndPoint, DtlsConnection> _connections = new Dictionary<IPEndPoint, DtlsConnection>();
         private object _connectionsSyncRoot = new object();
 
         public async Task<bool> ConnectAsync(IPEndPoint ipEndPoint, CancellationToken cancellationToken)
         {
-            var connection = new DtlsConnectionState(ipEndPoint,this);
+            var connection = new DtlsConnection(ipEndPoint, this);
             lock (_connectionsSyncRoot)
             {
-                if(!_connections.TryAdd(ipEndPoint, connection))
+                if (!_connections.TryAdd(ipEndPoint, connection))
                 {
                     return false;
                 }
@@ -54,13 +54,13 @@ namespace Stormancer.Dtls
             }
             catch
             {
-                lock(_connectionsSyncRoot)
+                lock (_connectionsSyncRoot)
                 {
                     _connections.Remove(ipEndPoint);
                 }
                 throw;
             }
-           
+
         }
 
         public ChannelReader<Datagram> SendReader => _sendChannel.Reader;
@@ -85,6 +85,13 @@ namespace Stormancer.Dtls
 
         }
 
+        internal Task SendHelloAsync()
+        {
+            throw new NotImplementedException();
+        }
+
+
+      
         private void HandleDatagram(Datagram datagram)
         {
             var dataLeft = true;
@@ -100,13 +107,13 @@ namespace Stormancer.Dtls
                     case DtlsRecordType.PlainText:
                         {
                             read = HandlePlainTextRecord(span, datagram.RemoteEndpoint);
-                            
+
                             break;
                         }
                     case DtlsRecordType.CipherText:
                         {
                             read = HandleCipherTextRecord(span, datagram.RemoteEndpoint);
-                           
+
                             break;
                         }
                     case DtlsRecordType.Invalid:
@@ -128,35 +135,57 @@ namespace Stormancer.Dtls
                     dataLeft = false;
                 }
 
-               
+
 
             }
 
 
         }
-        private int HandlePlainTextRecord(ReadOnlySpan<byte> span, IPEndPoint remoteEndpoint)
+        private int HandlePlainTextRecord(in ReadOnlySpan<byte> span, IPEndPoint remoteEndpoint)
         {
-            var read = DtlsPlainTextHeader.TryRead(span, out var header);
-                
-            if(read != 0)
+            var read = DtlsPlainTextHeader.TryRead(span, out var recordHeader);
+
+            if (read > 0)
             {
-                var content = span.Slice(read, header.Length);
+              
+                var handshakeHeaderLength = DtlsHandshakeHeader.TryRead(span.Slice(read, recordHeader.Length), out var handshakeHeader);
+                if (handshakeHeaderLength < 0)
+                {
+                    return -1;
+                }
+
+                read += handshakeHeaderLength;
+
 
                 lock (_connectionsSyncRoot)
                 {
+
                     if (!_connections.TryGetValue(remoteEndpoint, out var connection))
                     {
-                        connection = new DtlsConnectionState();
-                        _connections.Add(remoteEndpoint, connection);
+                        if (handshakeHeader.MsgType == HandshakeType.client_hello)
+                        {
+                            connection = new DtlsConnection(remoteEndpoint, this);
+                            _connections.Add(remoteEndpoint, connection);
+                        }
+                        else
+                        {
+                            return -1;
+                        }
                     }
 
-                    connection.HandlePlainTextRecord(ref header, content);
+                    var recordContentSize = connection.TryHandlePlainTextRecord(recordHeader, handshakeHeader, span.Slice(read, recordHeader.Length - handshakeHeaderLength));
+                    if(recordContentSize < 0)
+                    {
+                        return -1;
+                    }
+
+                    read += recordContentSize;
                 }
-                return read + header.Length;
+                return read;
             }
             else
-            { 
-                return 0;
+            {
+                return -1;
             }
         }
 
@@ -168,9 +197,9 @@ namespace Stormancer.Dtls
             {
                 var content = span.Slice(read, header.Length);
 
-                lock(_connectionsSyncRoot)
+                lock (_connectionsSyncRoot)
                 {
-                    if(_connections.TryGetValue(remoteEndpoint,out var connection))
+                    if (_connections.TryGetValue(remoteEndpoint, out var connection))
                     {
                         connection.HandleCipherTextRecord(ref header, content);
                     }

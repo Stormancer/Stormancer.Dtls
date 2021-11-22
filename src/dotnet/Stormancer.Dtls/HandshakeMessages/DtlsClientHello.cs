@@ -6,6 +6,12 @@ using System.Threading.Tasks;
 
 namespace Stormancer.Dtls
 {
+    public interface IDtlsMessage
+    {
+
+    }
+
+
     /// <summary>
     /// ClientHello DTLS message
     /// </summary>
@@ -28,8 +34,18 @@ namespace Stormancer.Dtls
     //    Extension extensions<8..2^16-1>;
     //}
     //ClientHello;
-    internal readonly struct DtlsClientHello
+    internal readonly struct DtlsClientHello : IDtlsMessage
     {
+        public static bool TryReadFrom(in ReadOnlySpan<byte> buffer,out DtlsClientHello hello, out IReadOnlyDictionary<DtlsExtensionType, IDtlsExtensionData> extensions)
+        {
+            throw new NotImplementedException();
+        }
+
+        public static bool TryProcess(in DtlsHandshakeHeader header,in ReadOnlySpan<byte> buffer)
+        {
+            throw new NotImplementedException();
+        }
+
         /// <summary>
         /// 
         /// </summary>
@@ -109,9 +125,7 @@ namespace Stormancer.Dtls
         ///compression methods and (if negotiating such a prior version) MUST
         ///follow the procedures for the appropriate prior version of TLS.
         /// </remarks>
-        public byte Legacy_Compression_Methods { get; }
-
-        public
+        public static byte Legacy_Compression_Methods { get; } = 0;
 
     }
 }

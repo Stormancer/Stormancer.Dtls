@@ -97,7 +97,7 @@ namespace Stormancer.Dtls
         public uint FragmentOffset { get; }
         public uint FragmentLength { get; }
 
-        public static int TryRead(ReadOnlySpan<byte> buffer, out DtlsHandshakeHeader header)
+        public static int TryRead(in ReadOnlySpan<byte> buffer, out DtlsHandshakeHeader header)
         {
             if (buffer.Length < 12)
             {
@@ -254,7 +254,7 @@ namespace Stormancer.Dtls
         /// <param name="span"></param>
         /// <param name="header"></param>
         /// <returns></returns>
-        public static int TryRead(ReadOnlySpan<byte> span, out DtlsPlainTextHeader header)
+        public static int TryRead(in ReadOnlySpan<byte> span, out DtlsPlainTextHeader header)
         {
             if (span.Length < 13)
             {

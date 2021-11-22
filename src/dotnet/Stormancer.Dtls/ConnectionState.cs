@@ -12,12 +12,12 @@ namespace Stormancer.Dtls
     /// <summary>
     /// Contains data about a DTLS connection.
     /// </summary>
-    public class DtlsConnectionState
+    public class DtlsConnection
     {
         private const int EPOCH_STATE_BUFFER_LENGTH = 8;
         private readonly DtlsRecordLayer recordLayer;
 
-        internal DtlsConnectionState(System.Net.IPEndPoint ipEndPoint, DtlsRecordLayer recordLayer)
+        internal DtlsConnection(System.Net.IPEndPoint ipEndPoint, DtlsRecordLayer recordLayer)
         {
             _epochs[0] = new EpochState();
             RemoteEndpoint = ipEndPoint;
@@ -65,11 +65,13 @@ namespace Stormancer.Dtls
             }
         }
 
-        public async Task ConnectAsync(CancellationToken cancellationToken)
+        public async Task<bool> ConnectAsync(CancellationToken cancellationToken)
         {
             //Send an Hello request without cookies
             //Expect an HelloRetryRequest with a cookie.
-            recordLayer.SendHelloAsync();
+            //await SendHelloAsync();
+
+            throw new NotImplementedException();
         }
 
 
@@ -81,7 +83,7 @@ namespace Stormancer.Dtls
         /// </remarks>
         /// <param name=""></param>
         /// <returns></returns>
-        bool TryReconstructRecordNumber(ref DtlsPlainTextHeader header, out DtlsRecordNumber output, [NotNullWhen(true)] out EpochState? epoch)
+        bool TryReconstructRecordNumber(in DtlsPlainTextHeader header, out DtlsRecordNumber output, [NotNullWhen(true)] out EpochState? epoch)
         {
             var number = header.Number;
             if ((ushort)CurrentEpoch.Epoch == number.Epoch)
@@ -116,7 +118,7 @@ namespace Stormancer.Dtls
             }
         }
 
-        bool TryReconstructRecordNumber(ref DtlsUnifiedHeader header, out DtlsRecordNumber output, [NotNullWhen(true)] out EpochState? epoch)
+        bool TryReconstructRecordNumber(in DtlsUnifiedHeader header, out DtlsRecordNumber output, [NotNullWhen(true)] out EpochState? epoch)
         {
             if ((byte)CurrentEpoch.Epoch == header.Epoch)
             {
@@ -162,18 +164,20 @@ namespace Stormancer.Dtls
 
         internal void HandleCipherTextRecord(ref DtlsUnifiedHeader header, ReadOnlySpan<byte> content)
         {
-            if (TryReconstructRecordNumber(ref header, out var number, out var epoch))
+            if (TryReconstructRecordNumber(header, out var number, out var epoch))
             {
 
             }
         }
 
-        internal void HandlePlainTextRecord(ref DtlsPlainTextHeader header, ReadOnlySpan<byte> content)
+        internal int TryHandlePlainTextRecord(in DtlsPlainTextHeader header, in DtlsHandshakeHeader handshakeHeader, in ReadOnlySpan<byte> content)
         {
-            if (TryReconstructRecordNumber(ref header, out var number, out var epoch))
+            if (TryReconstructRecordNumber(header, out var number, out var epoch))
             {
 
             }
+
+            throw new NotImplementedException();
         }
     }
     public readonly struct DtlsRecordNumber

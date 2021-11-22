@@ -8,12 +8,12 @@ using System.Threading.Tasks;
 
 namespace Stormancer.Dtls
 {
-    public class HeartbeatService
+    internal class HeartbeatService
     {
-        private readonly DtlsConnectionState connectionState;
+        private readonly DtlsConnection connectionState;
         private readonly DtlsRecordLayer recordLayer;
 
-        public HeartbeatService(DtlsConnectionState connectionState, DtlsRecordLayer recordLayer)
+        public HeartbeatService(DtlsConnection connectionState, DtlsRecordLayer recordLayer)
         {
             this.connectionState = connectionState;
             this.recordLayer = recordLayer;
