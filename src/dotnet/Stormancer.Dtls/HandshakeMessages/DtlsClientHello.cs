@@ -6,12 +6,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Stormancer.Dtls
+namespace Stormancer.Dtls.HandshakeMessages
 {
-    public interface IDtlsMessage
-    {
-
-    }
+    
 
 
     /// <summary>
@@ -36,7 +33,7 @@ namespace Stormancer.Dtls
     //    Extension extensions<8..2^16-1>;
     //}
     //ClientHello;
-    internal readonly struct DtlsClientHello
+    internal readonly struct DtlsClientHello 
     {
         public static bool TryReadFrom(in ReadOnlySpan<byte> buffer,out DtlsClientHello hello, out IReadOnlyDictionary<DtlsExtensionType, IDtlsExtensionData> extensions)
         {

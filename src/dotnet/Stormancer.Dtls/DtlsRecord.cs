@@ -29,108 +29,6 @@ namespace Stormancer.Dtls
         Invalid,
     }
 
-    public enum HandshakeType : byte
-    {
-        hello_request_RESERVED = 0,
-        client_hello = 1,
-        server_hello = 2,
-        hello_verify_request_RESERVED = 3,
-        new_session_ticket = 4,
-        end_of_early_data = 5,
-        hello_retry_request_RESERVED = 6,
-        encrypted_extensions = 8,
-        certificate = 11,
-        server_key_exchange_RESERVED = 12,
-        certificate_request = 13,
-        server_hello_done_RESERVED = 14,
-        certificate_verify = 15,
-        client_key_exchange_RESERVED = 16,
-        finished = 20,
-        certificate_url_RESERVED = 21,
-        certificate_status_RESERVED = 22,
-        supplemental_data_RESERVED = 23,
-        key_update = 24,
-        message_hash = 254,
-
-    }
-    /// <summary>
-    /// Handshake header
-    /// </summary>
-    /// <remarks>
-    /// struct {
-    ///    HandshakeType msg_type;    /* handshake type */
-    ///    uint24 length;             /* bytes in message */
-    ///    uint16 message_seq;        /* DTLS-required field */
-    ///    uint24 fragment_offset;    /* DTLS-required field */
-    ///    uint24 fragment_length;    /* DTLS-required field */
-    ///    select(msg_type)
-    ///    {
-    ///        case client_hello: ClientHello;
-    ///        case server_hello: ServerHello;
-    ///        case end_of_early_data: EndOfEarlyData;
-    ///        case encrypted_extensions: EncryptedExtensions;
-    ///        case certificate_request: CertificateRequest;
-    ///        case certificate: Certificate;
-    ///        case certificate_verify: CertificateVerify;
-    ///        case finished: Finished;
-    ///        case new_session_ticket: NewSessionTicket;
-    ///        case key_update: KeyUpdate;
-    ///    }
-    ///    body;
-    ///
-    ///}Handshake;
-    /// 
-    /// </remarks>
-    public readonly struct DtlsHandshakeHeader
-    {
-        public DtlsHandshakeHeader(HandshakeType msgType, uint length, ushort messageSequence, uint fragmenOffset, uint fragmentLength)
-        {
-            this.MsgType = msgType;
-            this.Length = length;
-            this.MessageSequence = messageSequence;
-            FragmentOffset = fragmenOffset;
-            FragmentLength = fragmentLength;
-        }
-        public HandshakeType MsgType { get; }
-        public uint Length { get; }
-        public ushort MessageSequence { get; }
-        public uint FragmentOffset { get; }
-        public uint FragmentLength { get; }
-
-        public static int TryRead(in ReadOnlySpan<byte> buffer, out DtlsHandshakeHeader header)
-        {
-            if (buffer.Length < 12)
-            {
-                header = default;
-                return 0;
-            }
-            var msgType = (HandshakeType)buffer[0];
-            var length = buffer.Slice(1).ReadUint24();
-            var messageSequence = BinaryPrimitives.ReadUInt16BigEndian(buffer.Slice(4));
-            var fragmentOffset = buffer.Slice(6).ReadUint24();
-            var fragmentLength = buffer.Slice(9).ReadUint24();
-
-            header = new DtlsHandshakeHeader(msgType, length, messageSequence, fragmentOffset, fragmentLength);
-            return 12;
-        }
-
-        public int TryWrite(Span<byte> buffer)
-        {
-            if (buffer.Length < 12)
-            {
-                return 0;
-            }
-
-            buffer[0] = (byte)MsgType;
-            buffer.Slice(1).TryWriteUint24(Length);
-            BinaryPrimitives.WriteUInt16BigEndian(buffer.Slice(4), MessageSequence);
-            buffer.Slice(6).TryWriteUint24(FragmentOffset);
-            buffer.Slice(9).TryWriteUint24(FragmentLength);
-            return 12;
-        }
-
-
-    }
 
     // 0 1 2 3 4 5 6 7
     //+-+-+-+-+-+-+-+-+
@@ -239,6 +137,16 @@ namespace Stormancer.Dtls
 
 
     }
+
+    // struct {
+    //    ContentType type;
+    //    ProtocolVersion legacy_record_version;
+    //    uint16 epoch = 0
+    //        uint48 sequence_number;
+    //    uint16 length;
+    //    opaque fragment[DTLSPlaintext.length];
+    //}
+    //DTLSPlaintext;
     public readonly struct DtlsPlainTextHeader
     {
         public DtlsPlainTextHeader(ContentType type, in DtlsPlainTextRecordNumber number, ushort length)
@@ -325,13 +233,11 @@ namespace Stormancer.Dtls
                 number = default;
                 return 0;
             }
-            var n = (buffer[0] & 0xff) << 8;
-            n |= (buffer[1] & 0xff);
-            var epoch = (ushort)n;
+            var epoch = BinaryPrimitives.ReadUInt16BigEndian(buffer);
 
-            uint hi = buffer.Slice(2).ReadUint24();
-            uint lo = buffer.Slice(5).ReadUint24();
-            var sequenceNumber = ((ulong)(hi & 0xffffffffL) << 24) | (ulong)(lo & 0xffffffffL);
+            var sequenceNumber = SpanHelpers.ReadUint48(buffer);
+
+           
 
             number = new DtlsPlainTextRecordNumber(epoch, sequenceNumber);
             return 8;
@@ -347,14 +253,17 @@ namespace Stormancer.Dtls
             }
             var epoch = Epoch;
             var sequenceNumber = SequenceNumber;
-            buffer[0] = (byte)(epoch >> 8);
-            buffer[1] = (byte)epoch;
-            buffer[2] = (byte)(sequenceNumber >> 40);
-            buffer[3] = (byte)(sequenceNumber >> 32);
-            buffer[4] = (byte)(sequenceNumber >> 24);
-            buffer[5] = (byte)(sequenceNumber >> 16);
-            buffer[6] = (byte)(sequenceNumber >> 8);
-            buffer[7] = (byte)sequenceNumber;
+
+            if(!BinaryPrimitives.TryWriteUInt16BigEndian(buffer, epoch))
+            {
+                return 0;
+            }
+
+            if(SpanHelpers.TryWriteUint48(buffer.Slice(2), sequenceNumber) != 6)
+            {
+                return 0;
+            }
+          
             return 8;
         }
         /// <summary>
@@ -373,7 +282,7 @@ namespace Stormancer.Dtls
 
 
 
- 
+
 
     public enum DtlsConnectionPhase
     {
@@ -388,6 +297,6 @@ namespace Stormancer.Dtls
 
         public int NumberOfAuthFailedPackets { get; set; } = 0;
 
-        
+
     }
 }

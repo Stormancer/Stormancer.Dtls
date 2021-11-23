@@ -63,7 +63,7 @@ namespace Stormancer.Dtls.HandshakeMessages
 
     //legacy_compression_method:  A single byte which MUST have the
     //   value 0.
-    internal readonly ref struct DtlsServerHello
+    internal readonly struct DtlsServerHello
     {
        
 

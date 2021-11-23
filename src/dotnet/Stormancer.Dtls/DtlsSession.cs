@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Stormancer.Dtls.HandshakeMessages;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -20,13 +21,13 @@ namespace Stormancer.Dtls
     {
         private const int EPOCH_STATE_BUFFER_LENGTH = 8;
         private readonly DtlsRecordLayer recordLayer;
-        private readonly PacketLayer _packetLayer; 
-        private readonly DtlsHandshake _handshake; 
+        private readonly PacketLayer _packetLayer;
+        private readonly DtlsHandshake _handshake;
 
         internal DtlsSession(System.Net.IPEndPoint ipEndPoint, DtlsRecordLayer recordLayer)
         {
-            _packetLayer = new PacketLayer();
-            _handshake = new DtlsHandshake(_packetLayer,this);
+            _packetLayer = new PacketLayer(this);
+            _handshake = new DtlsHandshake(_packetLayer, this);
 
             _epochs[0] = new Epoch();
             RemoteEndpoint = ipEndPoint;
@@ -38,6 +39,7 @@ namespace Stormancer.Dtls
         public DtlsConnectionPhase Phase { get; set; } = DtlsConnectionPhase.Handshake;
         public IPEndPoint RemoteEndpoint { get; }
 
+        public int Pmtu { get; set; }
         public Epoch CurrentEpoch
         {
             get
@@ -74,6 +76,14 @@ namespace Stormancer.Dtls
                 }
             }
         }
+
+        /// <summary>
+        /// Time the Session expires. 
+        /// </summary>
+        /// <remarks>
+        /// The packet layer updates the expiration date each time a packet is sent or received.
+        /// </remarks>
+        public DateTime ExpirationDate => _packetLayer.ExpirationDate;
 
         public Task<bool> ConnectAsync(CancellationToken cancellationToken)
         {
@@ -190,14 +200,5 @@ namespace Stormancer.Dtls
             throw new NotImplementedException();
         }
     }
-    public readonly struct DtlsRecordNumber
-    {
-        public DtlsRecordNumber(ulong epoch, ulong sequenceNumber)
-        {
-            Epoch = epoch;
-            SequenceNumber = sequenceNumber;
-        }
-        public ulong Epoch { get; }
-        public ulong SequenceNumber { get; }
-    }
+   
 }
