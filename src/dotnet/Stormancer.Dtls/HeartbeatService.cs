@@ -10,10 +10,10 @@ namespace Stormancer.Dtls
 {
     internal class HeartbeatService
     {
-        private readonly DtlsConnection connectionState;
+        private readonly DtlsSession connectionState;
         private readonly DtlsRecordLayer recordLayer;
 
-        public HeartbeatService(DtlsConnection connectionState, DtlsRecordLayer recordLayer)
+        public HeartbeatService(DtlsSession connectionState, DtlsRecordLayer recordLayer)
         {
             this.connectionState = connectionState;
             this.recordLayer = recordLayer;

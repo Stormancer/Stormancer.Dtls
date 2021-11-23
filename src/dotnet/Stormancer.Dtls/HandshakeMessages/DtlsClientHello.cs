@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -34,7 +36,7 @@ namespace Stormancer.Dtls
     //    Extension extensions<8..2^16-1>;
     //}
     //ClientHello;
-    internal readonly struct DtlsClientHello : IDtlsMessage
+    internal readonly struct DtlsClientHello
     {
         public static bool TryReadFrom(in ReadOnlySpan<byte> buffer,out DtlsClientHello hello, out IReadOnlyDictionary<DtlsExtensionType, IDtlsExtensionData> extensions)
         {
@@ -45,6 +47,31 @@ namespace Stormancer.Dtls
         {
             throw new NotImplementedException();
         }
+
+
+        public int GetLength()
+        {
+
+        }
+
+        public int Write(ref Span<byte> buffer)
+        {
+            Debug.Assert(buffer.Length >= GetLength());
+
+            return 0;
+        }
+        public DtlsClientHello(IEnumerable<ushort> cipherSuites, IEnumerable<IDtlsExtensionData> extensionData)
+        {
+           
+            CipherSuites = cipherSuites;
+
+            using var generator = RandomNumberGenerator.Create();
+            var bytes = new byte[32];
+            generator.GetBytes(bytes);
+            Random = new ReadOnlyMemory<byte>(bytes);
+            Extensions = extensionData;
+        }
+
 
         /// <summary>
         /// 
@@ -81,7 +108,7 @@ namespace Stormancer.Dtls
         /// single byte length field).
         /// TODO: Support DTLS 1.2
         /// </remarks>
-        public static ReadOnlyMemory<byte> Legacy_Session { get; } = ReadOnlyMemory<byte>.Empty;
+        public static byte Legacy_Session { get; } = 0;
 
         /// <summary>
         /// 
@@ -107,7 +134,7 @@ namespace Stormancer.Dtls
         ///SHOULD advertise at least one cipher suite indicating a Hash
         ///associated with the PSK.
         /// </remarks>
-        public IEnumerable<ushort> CipherSuite { get; }
+        public IEnumerable<ushort> CipherSuites { get; }
 
         /// <summary>
         /// 
@@ -126,6 +153,8 @@ namespace Stormancer.Dtls
         ///follow the procedures for the appropriate prior version of TLS.
         /// </remarks>
         public static byte Legacy_Compression_Methods { get; } = 0;
+
+        public IEnumerable<IDtlsExtensionData> Extensions { get; } 
 
     }
 }

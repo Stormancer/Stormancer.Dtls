@@ -34,12 +34,12 @@ namespace Stormancer.Dtls
         private Channel<Datagram> _sendChannel = Channel.CreateUnbounded<Datagram>();
         private Channel<Datagram> _receiveChannel = Channel.CreateUnbounded<Datagram>();
 
-        private Dictionary<IPEndPoint, DtlsConnection> _connections = new Dictionary<IPEndPoint, DtlsConnection>();
+        private Dictionary<IPEndPoint, DtlsSession> _connections = new Dictionary<IPEndPoint, DtlsSession>();
         private object _connectionsSyncRoot = new object();
 
         public async Task<bool> ConnectAsync(IPEndPoint ipEndPoint, CancellationToken cancellationToken)
         {
-            var connection = new DtlsConnection(ipEndPoint, this);
+            var connection = new DtlsSession(ipEndPoint, this);
             lock (_connectionsSyncRoot)
             {
                 if (!_connections.TryAdd(ipEndPoint, connection))
@@ -164,7 +164,7 @@ namespace Stormancer.Dtls
                     {
                         if (handshakeHeader.MsgType == HandshakeType.client_hello)
                         {
-                            connection = new DtlsConnection(remoteEndpoint, this);
+                            connection = new DtlsSession(remoteEndpoint, this);
                             _connections.Add(remoteEndpoint, connection);
                         }
                         else

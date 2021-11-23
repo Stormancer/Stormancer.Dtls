@@ -380,10 +380,10 @@ namespace Stormancer.Dtls
         Handshake,
         Active
     }
-    public class EpochState
+    public class Epoch
     {
         public DateTime StartedOn { get; } = DateTime.UtcNow;
-        public ulong Epoch { get; set; } = 0;
+        public ulong EpochId { get; set; } = 0;
         public ulong LatestDeprotectedSequenceNumber { get; set; } = 0;
 
         public int NumberOfAuthFailedPackets { get; set; } = 0;

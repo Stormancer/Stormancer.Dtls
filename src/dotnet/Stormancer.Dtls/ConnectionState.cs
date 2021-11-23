@@ -9,26 +9,36 @@ using System.Threading.Tasks;
 
 namespace Stormancer.Dtls
 {
+    public class DtlsSessionConfiguration
+    {
+        public IEnumerable<ushort> CipherSuites { get; set; } = new ushort[] { DtlsCipherSuites.TLS_AES_128_GCM_SHA256 };
+    }
     /// <summary>
     /// Contains data about a DTLS connection.
     /// </summary>
-    public class DtlsConnection
+    public class DtlsSession
     {
         private const int EPOCH_STATE_BUFFER_LENGTH = 8;
         private readonly DtlsRecordLayer recordLayer;
+        private readonly PacketLayer _packetLayer; 
+        private readonly DtlsHandshake _handshake; 
 
-        internal DtlsConnection(System.Net.IPEndPoint ipEndPoint, DtlsRecordLayer recordLayer)
+        internal DtlsSession(System.Net.IPEndPoint ipEndPoint, DtlsRecordLayer recordLayer)
         {
-            _epochs[0] = new EpochState();
+            _packetLayer = new PacketLayer();
+            _handshake = new DtlsHandshake(_packetLayer,this);
+
+            _epochs[0] = new Epoch();
             RemoteEndpoint = ipEndPoint;
             this.recordLayer = recordLayer;
         }
 
+        public DtlsSessionConfiguration SessionConfiguration { get; set; } = new DtlsSessionConfiguration();
 
         public DtlsConnectionPhase Phase { get; set; } = DtlsConnectionPhase.Handshake;
         public IPEndPoint RemoteEndpoint { get; }
 
-        public EpochState CurrentEpoch
+        public Epoch CurrentEpoch
         {
             get
             {
@@ -42,10 +52,10 @@ namespace Stormancer.Dtls
         /// <summary>
         /// We keep the last 8 epochs to be able to decode older messages.
         /// </summary>
-        private EpochState?[] _epochs = new EpochState?[EPOCH_STATE_BUFFER_LENGTH];
+        private Epoch?[] _epochs = new Epoch?[EPOCH_STATE_BUFFER_LENGTH];
         private int _currentEpochIndex = 0;
 
-        public IEnumerable<EpochState> Epochs
+        public IEnumerable<Epoch> Epochs
         {
             get
             {
@@ -65,13 +75,13 @@ namespace Stormancer.Dtls
             }
         }
 
-        public async Task<bool> ConnectAsync(CancellationToken cancellationToken)
+        public Task<bool> ConnectAsync(CancellationToken cancellationToken)
         {
             //Send an Hello request without cookies
             //Expect an HelloRetryRequest with a cookie.
             //await SendHelloAsync();
 
-            throw new NotImplementedException();
+            return _handshake.PerformAsync(cancellationToken);
         }
 
 
@@ -83,12 +93,12 @@ namespace Stormancer.Dtls
         /// </remarks>
         /// <param name=""></param>
         /// <returns></returns>
-        bool TryReconstructRecordNumber(in DtlsPlainTextHeader header, out DtlsRecordNumber output, [NotNullWhen(true)] out EpochState? epoch)
+        bool TryReconstructRecordNumber(in DtlsPlainTextHeader header, out DtlsRecordNumber output, [NotNullWhen(true)] out Epoch? epoch)
         {
             var number = header.Number;
-            if ((ushort)CurrentEpoch.Epoch == number.Epoch)
+            if ((ushort)CurrentEpoch.EpochId == number.Epoch)
             {
-                output = new DtlsRecordNumber(CurrentEpoch.Epoch, number.SequenceNumber);
+                output = new DtlsRecordNumber(CurrentEpoch.EpochId, number.SequenceNumber);
                 epoch = CurrentEpoch;
                 return true;
             }
@@ -96,9 +106,9 @@ namespace Stormancer.Dtls
             {
                 foreach (var e in Epochs)
                 {
-                    if ((ushort)e.Epoch == number.Epoch)
+                    if ((ushort)e.EpochId == number.Epoch)
                     {
-                        output = new DtlsRecordNumber(e.Epoch, number.SequenceNumber);
+                        output = new DtlsRecordNumber(e.EpochId, number.SequenceNumber);
                         epoch = e;
                         return true;
                     }
@@ -118,15 +128,15 @@ namespace Stormancer.Dtls
             }
         }
 
-        bool TryReconstructRecordNumber(in DtlsUnifiedHeader header, out DtlsRecordNumber output, [NotNullWhen(true)] out EpochState? epoch)
+        bool TryReconstructRecordNumber(in DtlsUnifiedHeader header, out DtlsRecordNumber output, [NotNullWhen(true)] out Epoch? epoch)
         {
-            if ((byte)CurrentEpoch.Epoch == header.Epoch)
+            if ((byte)CurrentEpoch.EpochId == header.Epoch)
             {
                 ulong sequenceNumber = header.SequenceNumberLength ?
                     (CurrentEpoch.LatestDeprotectedSequenceNumber & 0x_ffffffff_ffff0000) | header.SequenceNumber :
                      (CurrentEpoch.LatestDeprotectedSequenceNumber & 0x_ffffffff_ffffff00) | header.SequenceNumber;
 
-                output = new DtlsRecordNumber(CurrentEpoch.Epoch, sequenceNumber);
+                output = new DtlsRecordNumber(CurrentEpoch.EpochId, sequenceNumber);
                 epoch = CurrentEpoch;
                 return true;
             }
@@ -134,13 +144,13 @@ namespace Stormancer.Dtls
             {
                 foreach (var e in Epochs)
                 {
-                    if ((byte)e.Epoch == header.Epoch)
+                    if ((byte)e.EpochId == header.Epoch)
                     {
                         ulong sequenceNumber = header.SequenceNumberLength ?
                             (e.LatestDeprotectedSequenceNumber & 0x_ffffffff_ffff0000) | header.SequenceNumber :
                             (e.LatestDeprotectedSequenceNumber & 0x_ffffffff_ffffff00) | header.SequenceNumber;
 
-                        output = new DtlsRecordNumber(e.Epoch, sequenceNumber);
+                        output = new DtlsRecordNumber(e.EpochId, sequenceNumber);
                         epoch = e;
                         return true;
                     }
