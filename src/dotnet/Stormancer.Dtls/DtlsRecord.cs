@@ -235,7 +235,11 @@ namespace Stormancer.Dtls
             }
             var epoch = BinaryPrimitives.ReadUInt16BigEndian(buffer);
 
-            var sequenceNumber = SpanHelpers.ReadUint48(buffer);
+            if(buffer.TryReadUint48(out var sequenceNumber) != 6)
+            {
+                number = default;
+                return -1;
+            }
 
            
 

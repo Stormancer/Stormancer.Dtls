@@ -7,6 +7,8 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
 using System.Threading.Channels;
+using Stormancer.Dtls.HandshakeMessages;
+
 namespace Stormancer.Dtls
 {
     public struct Datagram : IDisposable

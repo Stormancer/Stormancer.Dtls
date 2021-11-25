@@ -49,6 +49,7 @@ namespace Stormancer.Dtls.HandshakeMessages
         public int GetLength()
         {
 
+            throw new NotImplementedException();
         }
 
         public int Write(ref Span<byte> buffer)

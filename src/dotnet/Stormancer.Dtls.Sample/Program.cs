@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Net;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -9,15 +10,34 @@ namespace Stormancer.Dtls.Sample
     {
         static async Task Main(string[] args)
         {
-            var cts = new CancellationTokenSource();
-            var token = cts.Token;
+            var array = new byte[2048];
+            byte[] hash1, hash2;
+            using (var sha = SHA256.Create())
+            {
 
-            var task = RunPeers(token);
+               
 
-            Console.Read();
-            cts.Cancel();
+                hash1 = sha.ComputeHash(array);
+            }
 
-            await Task.WhenAll(task);
+            using (var sha = SHA256.Create())
+            {
+           
+                sha.TransformBlock(array, 0, 500, null, 0);
+                sha.TransformBlock(array, 500, 1024, null, 0);
+                //sha.TransformBlock(array, 1024, 512, null, 0);
+                sha.TransformFinalBlock(array, 1524, 524);
+                hash2 = sha.Hash;
+            }
+            //var cts = new CancellationTokenSource();
+            //var token = cts.Token;
+
+            //var task = RunPeers(token);
+
+            //Console.Read();
+            //cts.Cancel();
+
+            //await Task.WhenAll(task);
 
         }
 

@@ -14,36 +14,42 @@ namespace Stormancer.Dtls
     //RecordNumber;
     public readonly struct DtlsRecordNumber
     {
-        public static int TryRead(ReadOnlySpan<byte> buffer, ref DtlsRecordNumber recordNumber)
+        public static bool TryRead(ReadOnlySpan<byte> buffer, ref DtlsRecordNumber recordNumber,out int bytesRead)
         {
             if(!BinaryPrimitives.TryReadUInt64BigEndian(buffer, out var epoch))
             {
-                recordNumber = default;
-                return -1;
+              
+                bytesRead = 0;
+                return false;
             }
 
-            if (buffer.Slice(8).TryReadUint48(out var sequenceNumber) != 6)
+            if (!BinaryPrimitives.TryReadUInt64BigEndian(buffer.Slice(8),out var sequenceNumber))
             {
-                recordNumber = default;
-                return -1;
+               
+                bytesRead = 0;
+                return false;
             }
 
             recordNumber = new DtlsRecordNumber(epoch,sequenceNumber);
-            return 14;
+            bytesRead = 16;
+            return true; 
         }
 
-        public int TryWrite(Span<byte> buffer)
+        public bool TryWrite(Span<byte> buffer, out int bytesWritten)
         {
             if (!BinaryPrimitives.TryWriteUInt64BigEndian(buffer, Epoch))
             {
-                return -1;
+                bytesWritten = 0;
+                return false;
             }
 
-            if(buffer.Slice(8).TryWriteUint48(SequenceNumber) != 6)
+            if(!BinaryPrimitives.TryWriteUInt64BigEndian(buffer.Slice(8),SequenceNumber))
             {
-                return -1;
+                bytesWritten = 0;
+                return false;
             }
-            return 14;
+            bytesWritten = 16;
+            return true;
         }
         public static int GetLength()
         {

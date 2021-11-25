@@ -74,6 +74,8 @@ namespace Stormancer.Dtls
             {
                 return false;
             }
+
+            throw new NotImplementedException();
         }
 
         private async Task<DtlsServerHello> WaitServerHelloAsync(CancellationToken cancellationToken)
