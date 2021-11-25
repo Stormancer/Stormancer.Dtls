@@ -93,7 +93,7 @@ namespace Stormancer.Dtls
         }
 
 
-      
+
         private void HandleDatagram(Datagram datagram)
         {
             var dataLeft = true;
@@ -104,11 +104,12 @@ namespace Stormancer.Dtls
 
                 var recordType = GetRecordType(span);
                 int read = 0;
+                bool success = false;
                 switch (recordType)
                 {
                     case DtlsRecordType.PlainText:
                         {
-                            read = HandlePlainTextRecord(span, datagram.RemoteEndpoint);
+                            success = TryHandlePlainTextRecord(span, datagram.RemoteEndpoint, out read);
 
                             break;
                         }
@@ -123,7 +124,7 @@ namespace Stormancer.Dtls
                         break;
                 }
 
-                if (read > 0)
+                if (success)
                 {
                     span = span.Slice(read);
                     if (span.Length == 0)
@@ -143,53 +144,85 @@ namespace Stormancer.Dtls
 
 
         }
-        private int HandlePlainTextRecord(in ReadOnlySpan<byte> span, IPEndPoint remoteEndpoint)
+        private bool TryHandlePlainTextRecord(in ReadOnlySpan<byte> span, IPEndPoint remoteEndpoint, out int read)
         {
-            var read = DtlsPlainTextHeader.TryRead(span, out var recordHeader);
+            read = 0;
+            var dataleft = true;
 
-            if (read > 0)
+            if (DtlsPlainTextHeader.TryRead(span, out var recordHeader, out var headerRead))
             {
-              
-                var handshakeHeaderLength = DtlsHandshakeHeader.TryRead(span.Slice(read, recordHeader.Length), out var handshakeHeader);
-                if (handshakeHeaderLength < 0)
-                {
-                    return -1;
-                }
-
-                read += handshakeHeaderLength;
-
-
-                lock (_connectionsSyncRoot)
-                {
-
-                    if (!_connections.TryGetValue(remoteEndpoint, out var connection))
-                    {
-                        if (handshakeHeader.MsgType == HandshakeType.client_hello)
-                        {
-                            connection = new DtlsSession(remoteEndpoint, this);
-                            _connections.Add(remoteEndpoint, connection);
-                        }
-                        else
-                        {
-                            return -1;
-                        }
-                    }
-
-                    var recordContentSize = connection.TryHandlePlainTextRecord(recordHeader, handshakeHeader, span.Slice(read, recordHeader.Length - handshakeHeaderLength));
-                    if(recordContentSize < 0)
-                    {
-                        return -1;
-                    }
-
-                    read += recordContentSize;
-                }
-                return read;
+                read += headerRead;
             }
             else
             {
-                return -1;
+                return false;
+            }
+
+            if (span.Length < read + recordHeader.Length)
+            {
+                return false;
+            }
+
+
+            while (read < span.Length)
+            {
+
+                if (!DtlsHandshakeHeader.TryRead(span.Slice(read, recordHeader.Length), out var handshakeHeader, out var handshakeHeaderLength))
+                {
+                    return false;
+                }
+
+                read += handshakeHeaderLength;
+                var fragmentLength = handshakeHeader.FragmentLength;
+                if (TryHandleRecordFragment(remoteEndpoint, recordHeader, handshakeHeader, span.Slice(read, fragmentLength)))
+                {
+                    read += fragmentLength;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private bool TryHandleRecordFragment(IPEndPoint remoteEndpoint, in DtlsPlainTextHeader recordHeader, in DtlsHandshakeHeader handshakeHeader, in ReadOnlySpan<byte> content)
+        {
+            if (handshakeHeader.FragmentLength > DtlsConstants.MAX_FRAGMENT_LENGTH)
+            {
+                return false;
+            }
+            if (handshakeHeader.FragmentLength + handshakeHeader.FragmentLength > handshakeHeader.Length) //Invalid fragment length/offset
+            {
+                return false;
+            }
+
+            if (handshakeHeader.Length > DtlsConstants.MAX_HANDSHAKE_MSG_LENGTH) 
+            {
+                return false;
+            }
+
+
+            if (TryGetCompleteMessage(remoteEndpoint, recordHeader, handshakeHeader, content, out var))
+            {
+
             }
         }
+
+
+        private bool TryGetCompleteMessage(IPEndPoint remoteEndpoint, in DtlsPlainTextHeader recordHeader, in DtlsHandshakeHeader handshakeHeader, in ReadOnlySpan<byte> content, out ReadOnlySpan<byte> fullContent)
+        {
+            if (handshakeHeader.IsSingleFragmentMessage)
+            {
+                fullContent = content;
+            }
+            else//buffer
+            {
+
+            }
+        }
+
 
         private int HandleCipherTextRecord(ReadOnlySpan<byte> span, IPEndPoint remoteEndpoint)
         {

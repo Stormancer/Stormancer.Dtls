@@ -11,46 +11,68 @@ namespace Stormancer.Dtls
 {
     internal static class SpanHelpers
     {
-        public static uint ReadUint24(this ReadOnlySpan<byte> buf)
+        public static bool TryReadUint24(in ReadOnlySpan<byte> buf, out uint value, out int read)
         {
+            if(buf.Length<3)
+            {
+                value = 0;
+                read = 0;
+                return false;
+            }
             int n = (buf[0] & 0xff) << 16;
             n |= (buf[1] & 0xff) << 8;
             n |= (buf[2] & 0xff);
-            return (uint)n;
+            value = (uint)n;
+            read = 3;
+            return true;
         }
 
-        public static int TryWriteUint24(this Span<byte> buffer, uint value)
+        public static bool TryWriteUint24(in Span<byte> buffer, uint value, out int written)
         {
             if (buffer.Length < 3)
             {
-                return 0;
+                written = 0;
+                return false;
             }
 
             buffer[0] = (byte)(value >> 16);
             buffer[1] = (byte)(value >> 8);
             buffer[2] = (byte)value;
 
-            return 3;
+            written = 3;
+            return true;
+           
         }
 
-        public static int TryReadUint48(this ReadOnlySpan<byte> buffer, out ulong value)
+        public static bool TryReadUint48(this ReadOnlySpan<byte> buffer, out ulong value, out int read)
         {
             if (buffer.Length < 6)
             {
                 value = default;
-                return -1;
+                read = 0;
+                return false;
             }
-            uint hi = buffer.ReadUint24();
-            uint lo = buffer.Slice(3).ReadUint24();
-            value = ((ulong)(hi & 0xffffffffL) << 24) | (ulong)(lo & 0xffffffffL);
-            return 6;
+            if (TryReadUint24(buffer, out var hi, out var r1) && TryReadUint24(buffer.Slice(3), out var lo, out var r2))
+            {
+                read = r1 + r2;
+                value = ((ulong)(hi & 0xffffffffL) << 24) | (ulong)(lo & 0xffffffffL);
+                return true;
+            }
+            else
+            {
+                value = default;
+                read = default;
+                return false;
+            }
+
         }
 
-        public static int TryWriteUint48(this Span<byte> buffer, ulong value)
+        public static bool TryWriteUint48(in Span<byte> buffer, ulong value, out int written)
         {
             if (buffer.Length < 6)
             {
-                return -1;
+                written = default;
+                return false;
             }
             buffer[0] = (byte)(value >> 40);
             buffer[1] = (byte)(value >> 32);
@@ -58,7 +80,8 @@ namespace Stormancer.Dtls
             buffer[3] = (byte)(value >> 16);
             buffer[4] = (byte)(value >> 8);
             buffer[5] = (byte)(value);
-            return 6;
+            written = 6;
+            return true;
 
         }
 

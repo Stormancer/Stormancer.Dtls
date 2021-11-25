@@ -66,30 +66,56 @@ namespace Stormancer.Dtls.HandshakeMessages
             this.MsgType = msgType;
             this.Length = length;
             this.MessageSequence = messageSequence;
-            FragmentOffset = fragmenOffset;
-            FragmentLength = fragmentLength;
+            FragmentOffset = (int)fragmenOffset;
+            FragmentLength = (int)fragmentLength;
         }
         public HandshakeType MsgType { get; }
         public uint Length { get; }
         public ushort MessageSequence { get; }
-        public uint FragmentOffset { get; }
-        public uint FragmentLength { get; }
+        public int FragmentOffset { get; }
+        public int FragmentLength { get; }
+        public bool IsSingleFragmentMessage => FragmentLength == Length && FragmentOffset == 0;
 
-        public static int TryRead(in ReadOnlySpan<byte> buffer, out DtlsHandshakeHeader header)
+        public static bool TryRead(in ReadOnlySpan<byte> buffer, out DtlsHandshakeHeader header, out int read)
         {
             if (buffer.Length < 12)
             {
                 header = default;
-                return 0;
+                read = 0;
+                return false;
             }
             var msgType = (HandshakeType)buffer[0];
-            var length = buffer.Slice(1).ReadUint24();
-            var messageSequence = BinaryPrimitives.ReadUInt16BigEndian(buffer.Slice(4));
-            var fragmentOffset = buffer.Slice(6).ReadUint24();
-            var fragmentLength = buffer.Slice(9).ReadUint24();
+            if (!SpanHelpers.TryReadUint24(buffer.Slice(1), out var length, out _))
+            {
+                header = default;
+                read = 0;
+                return false;
+            }
+
+            if (!BinaryPrimitives.TryReadUInt16BigEndian(buffer.Slice(4), out var messageSequence))
+            {
+                header = default;
+                read = 0;
+                return false;
+            }
+
+            if (SpanHelpers.TryReadUint24(buffer.Slice(6), out var fragmentOffset, out _))
+            {
+                header = default;
+                read = 0;
+                return false;
+            }
+
+            if (SpanHelpers.TryReadUint24(buffer.Slice(9), out var fragmentLength, out _))
+            {
+                header = default;
+                read = 0;
+                return false;
+            }
 
             header = new DtlsHandshakeHeader(msgType, length, messageSequence, fragmentOffset, fragmentLength);
-            return 12;
+            read = 12;
+            return true;
         }
 
         public int TryWrite(Span<byte> buffer)
@@ -100,10 +126,11 @@ namespace Stormancer.Dtls.HandshakeMessages
             }
 
             buffer[0] = (byte)MsgType;
-            buffer.Slice(1).TryWriteUint24(Length);
+            SpanHelpers.TryWriteUint24(buffer.Slice(1), Length, out _);
             BinaryPrimitives.WriteUInt16BigEndian(buffer.Slice(4), MessageSequence);
-            buffer.Slice(6).TryWriteUint24(FragmentOffset);
-            buffer.Slice(9).TryWriteUint24(FragmentLength);
+            SpanHelpers.TryWriteUint24(buffer.Slice(6), (uint)FragmentOffset, out _);
+            SpanHelpers.TryWriteUint24(buffer.Slice(9), (uint)FragmentLength, out _);
+
             return 12;
         }
 

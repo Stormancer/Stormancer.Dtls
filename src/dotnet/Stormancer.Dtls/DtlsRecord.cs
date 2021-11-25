@@ -162,7 +162,7 @@ namespace Stormancer.Dtls
         /// <param name="span"></param>
         /// <param name="header"></param>
         /// <returns></returns>
-        public static int TryRead(in ReadOnlySpan<byte> span, out DtlsPlainTextHeader header)
+        public static bool TryRead(in ReadOnlySpan<byte> span, out DtlsPlainTextHeader header, out int read)
         {
             if (span.Length < 13)
             {
