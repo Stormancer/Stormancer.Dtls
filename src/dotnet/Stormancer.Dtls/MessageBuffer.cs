@@ -29,28 +29,26 @@ namespace Stormancer.Dtls
                     
                 }
             }
+            buffer.Write(content);
 
-            if (fragmentOffset > buffer.Written)
-            {
-                return false;
-            }
-            content.CopyTo(buffer.Data.Span.Slice(fragmentOffset));
+          
+          
         }
 
         private struct MessageBuffer : IDisposable
         {
+            private readonly record BufferSegment(ushort offset, ushort length)
+          
             private IMemoryOwner<byte> _owner;
+            
             public MessageBuffer(int length)
             {
-                Written = 0;
 
                 _owner = MemoryPool<byte>.Shared.Rent(length);
 
             }
-            /// <summary>
-            /// Number of bytes written.
-            /// </summary>
-            public int Written { get; set; }
+
+            public List<>
 
             public Memory<byte> Data => _owner.Memory;
 

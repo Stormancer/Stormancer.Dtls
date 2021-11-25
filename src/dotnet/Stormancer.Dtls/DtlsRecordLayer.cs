@@ -166,27 +166,24 @@ namespace Stormancer.Dtls
 
             while (read < span.Length)
             {
-
-                if (!DtlsHandshakeHeader.TryRead(span.Slice(read, recordHeader.Length), out var handshakeHeader, out var handshakeHeaderLength))
+                var result = recordHeader.Type switch
                 {
-                    return false;
-                }
-
-                read += handshakeHeaderLength;
-                var fragmentLength = handshakeHeader.FragmentLength;
-                if (TryHandleRecordFragment(remoteEndpoint, recordHeader, handshakeHeader, span.Slice(read, fragmentLength)))
-                {
-                    read += fragmentLength;
-                }
-                else
-                {
-                    return false;
-                }
+                    ContentType.ChangeCipherSpec => throw new NotImplementedException(),
+                    ContentType.Alert => throw new NotImplementedException(),
+                    ContentType.Handshake => throw new NotImplementedException(),
+                    ContentType.ApplicationData => throw new NotImplementedException(),
+                    ContentType.Heartbeat => false, //No plaintext heartbeat in DTLS1.3
+                    ContentType.Tls12Cid => throw new NotImplementedException(),
+                    ContentType.Ack => throw new NotImplementedException(),
+                    _ => false
+                };
+                
             }
 
             return true;
         }
 
+        private bool TryHandleHandshakeFragment()
         private bool TryHandleRecordFragment(IPEndPoint remoteEndpoint, in DtlsPlainTextHeader recordHeader, in DtlsHandshakeHeader handshakeHeader, in ReadOnlySpan<byte> content)
         {
             if (handshakeHeader.FragmentLength > DtlsConstants.MAX_FRAGMENT_LENGTH)
@@ -198,7 +195,7 @@ namespace Stormancer.Dtls
                 return false;
             }
 
-            if (handshakeHeader.Length > DtlsConstants.MAX_HANDSHAKE_MSG_LENGTH) 
+            if (handshakeHeader.Length > DtlsConstants.MAX_HANDSHAKE_MSG_LENGTH)
             {
                 return false;
             }
