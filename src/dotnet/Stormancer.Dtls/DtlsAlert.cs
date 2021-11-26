@@ -95,28 +95,32 @@ namespace Stormancer.Dtls
         //}
         //Alert;
 
-        public static int TryRead(ReadOnlySpan<byte> buffer, out DtlsAlert alert)
+        public static bool TryRead(ReadOnlySpan<byte> buffer, out DtlsAlert alert, out int read)
         {
             if(buffer.Length < 2)
             {
                 alert = default;
-                return -1;
+                read = default;
+                return false;
             }
 
             alert = new DtlsAlert((AlertLevel)buffer[0], (AlertDescription)buffer[1]);
-            return 2;
+            read = 2;
+            return true;
         }
 
-        public int TryWrite(Span<byte> buffer)
+        public bool TryWrite(Span<byte> buffer, out int written)
         {
             if(buffer.Length < 2)
             {
-                return -1;
+                written = default;
+                return false;
             }
 
             buffer[0] = (byte)Level;
             buffer[1] = (byte)Description;
-            return 2;
+            written = 2;
+            return true;
         }
 
         public static int GetLength()
@@ -127,5 +131,35 @@ namespace Stormancer.Dtls
 
         public AlertLevel Level { get; }
         public AlertDescription Description { get; }
+    }
+
+    internal class AlertController
+    {
+        public bool TryHandleAlertRecord(DtlsSession? session, DtlsRecordNumber recordNumber, Epoch? epoch, ReadOnlySpan<byte> buffer, out int read)
+        {
+            if(epoch == null || session == null)
+            {
+                read = default;
+                return false;
+            }
+
+            if(DtlsAlert.TryRead(buffer, out var alert, out var contentRead ))
+            {
+                read = contentRead;
+
+                session.OnAlertReceived(alert);
+
+                return true;
+            }
+            else
+            {
+                read = default;
+                return false;
+            }
+
+
+
+
+        }
     }
 }

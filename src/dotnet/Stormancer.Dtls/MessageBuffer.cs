@@ -37,7 +37,7 @@ namespace Stormancer.Dtls
 
         private struct MessageBuffer : IDisposable
         {
-            private readonly record BufferSegment(ushort offset, ushort length)
+            private readonly record BufferSegment(ushort offset, ushort length);
           
             private IMemoryOwner<byte> _owner;
             

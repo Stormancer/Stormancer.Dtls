@@ -66,4 +66,13 @@ namespace Stormancer.Dtls.HandshakeMessages
         }
         public IEnumerable<DtlsRecordNumber> RecordNumbers { get; }
     }
+
+
+    public class AckController
+    {
+        public bool TryHandleAckRecord(DtlsSession? session, DtlsRecordNumber recordNumber, Epoch? epoch, ReadOnlySpan<byte> buffer, out int read)
+        {
+
+        }
+    }
 }

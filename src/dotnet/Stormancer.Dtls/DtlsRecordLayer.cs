@@ -33,50 +33,28 @@ namespace Stormancer.Dtls
     internal class DtlsRecordLayer
     {
 
-        private Channel<Datagram> _sendChannel = Channel.CreateUnbounded<Datagram>();
-        private Channel<Datagram> _receiveChannel = Channel.CreateUnbounded<Datagram>();
 
-        private Dictionary<IPEndPoint, DtlsSession> _connections = new Dictionary<IPEndPoint, DtlsSession>();
-        private object _connectionsSyncRoot = new object();
+        private SessionManager sessionManager;
+        private readonly ChannelReader<Datagram> reader;
+        private readonly ChannelWriter<Datagram> writer;
 
-        public async Task<bool> ConnectAsync(IPEndPoint ipEndPoint, CancellationToken cancellationToken)
+        private AckController ackController = new AckController();
+        private AlertController alertController = new AlertController();
+        private HandshakeController handshakeController = new HandshakeController();
+
+      
+
+        public DtlsRecordLayer(SessionManager sessionManager, ChannelReader<Datagram> reader, ChannelWriter<Datagram> writer)
         {
-            var connection = new DtlsSession(ipEndPoint, this);
-            lock (_connectionsSyncRoot)
-            {
-                if (!_connections.TryAdd(ipEndPoint, connection))
-                {
-                    return false;
-                }
-            }
-
-            try
-            {
-                return await connection.ConnectAsync(cancellationToken);
-            }
-            catch
-            {
-                lock (_connectionsSyncRoot)
-                {
-                    _connections.Remove(ipEndPoint);
-                }
-                throw;
-            }
-
-        }
-
-        public ChannelReader<Datagram> SendReader => _sendChannel.Reader;
-        public ChannelWriter<Datagram> ReceiveWriter => _receiveChannel.Writer;
-
-        public DtlsRecordLayer()
-        {
-
+            this.sessionManager = sessionManager;
+            this.reader = reader;
+            this.writer = writer;
         }
 
         public async Task RunAsync(CancellationToken cancellationToken)
         {
 
-            await foreach (var datagram in _receiveChannel.Reader.ReadAllAsync(cancellationToken))
+            await foreach (var datagram in reader.ReadAllAsync(cancellationToken))
             {
                 using (datagram)
                 {
@@ -86,13 +64,6 @@ namespace Stormancer.Dtls
             }
 
         }
-
-        internal Task SendHelloAsync()
-        {
-            throw new NotImplementedException();
-        }
-
-
 
         private void HandleDatagram(Datagram datagram)
         {
@@ -144,10 +115,9 @@ namespace Stormancer.Dtls
 
 
         }
-        private bool TryHandlePlainTextRecord(in ReadOnlySpan<byte> span, IPEndPoint remoteEndpoint, out int read)
+        private bool TryHandlePlainTextRecord(ReadOnlySpan<byte> span, IPEndPoint remoteEndpoint, out int read)
         {
             read = 0;
-            var dataleft = true;
 
             if (DtlsPlainTextHeader.TryRead(span, out var recordHeader, out var headerRead))
             {
@@ -162,28 +132,42 @@ namespace Stormancer.Dtls
             {
                 return false;
             }
-
-
-            while (read < span.Length)
+            DtlsSession? session;
+            lock (_connectionsSyncRoot)
             {
-                var result = recordHeader.Type switch
-                {
-                    ContentType.ChangeCipherSpec => throw new NotImplementedException(),
-                    ContentType.Alert => throw new NotImplementedException(),
-                    ContentType.Handshake => throw new NotImplementedException(),
-                    ContentType.ApplicationData => throw new NotImplementedException(),
-                    ContentType.Heartbeat => false, //No plaintext heartbeat in DTLS1.3
-                    ContentType.Tls12Cid => throw new NotImplementedException(),
-                    ContentType.Ack => throw new NotImplementedException(),
-                    _ => false
-                };
-                
+                _connections.TryGetValue(remoteEndpoint, out session);
             }
 
-            return true;
+            if (DtlsRecordNumber.TryReconstructRecordNumber(recordHeader, session?.Epochs, out var recordNumber, out var epoch))
+            {
+
+                var success = true;
+                while (read < span.Length && success)
+                {
+                    int recordRead = 0;
+                    success = recordHeader.Type switch
+                    {
+                        ContentType.ChangeCipherSpec => false, // DTLS1.2
+                        ContentType.Alert => alertController.TryHandleAlertRecord(session, recordNumber, epoch, span.Slice(read, recordHeader.Length), out recordRead),
+                        ContentType.Handshake => handshakeController.TryHandleHandshakeRecord(session, recordNumber, epoch, span.Slice(read, recordHeader.Length), out recordRead),
+                        ContentType.ApplicationData => false, //DTLS1.2
+                        ContentType.Heartbeat => false, //No plaintext heartbeat in DTLS1.3
+                        ContentType.Tls12Cid => false, // DTL1.2 not supported,
+                        ContentType.Ack => ackController.TryHandleAckRecord(session, recordNumber, epoch, span.Slice(read, recordHeader.Length), out recordRead),
+                        _ => false
+                    };
+                    read += recordRead;
+
+                }
+                return success;
+            }
+            else
+            {
+                return false;
+            }
+
         }
 
-        private bool TryHandleHandshakeFragment()
         private bool TryHandleRecordFragment(IPEndPoint remoteEndpoint, in DtlsPlainTextHeader recordHeader, in DtlsHandshakeHeader handshakeHeader, in ReadOnlySpan<byte> content)
         {
             if (handshakeHeader.FragmentLength > DtlsConstants.MAX_FRAGMENT_LENGTH)
@@ -244,14 +228,8 @@ namespace Stormancer.Dtls
                 return 0;
             }
         }
-        public void WritePlainTextMessage()
-        {
 
-        }
-        public int TryWrite(Span<byte> buffer, in DtlsPlainTextHeader header)
-        {
-            return header.TryWrite(buffer);
-        }
+
 
         /// <summary>
         /// Get record header type.

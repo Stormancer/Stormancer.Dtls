@@ -1,4 +1,5 @@
-﻿using Stormancer.Dtls.HandshakeMessages;
+﻿using Microsoft.Extensions.Logging;
+using Stormancer.Dtls.HandshakeMessages;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -21,10 +22,11 @@ namespace Stormancer.Dtls
     {
         private const int EPOCH_STATE_BUFFER_LENGTH = 8;
         private readonly DtlsRecordLayer recordLayer;
+        private readonly ILogger logger;
         private readonly PacketLayer _packetLayer;
         private readonly DtlsHandshake _handshake;
 
-        internal DtlsSession(System.Net.IPEndPoint ipEndPoint, DtlsRecordLayer recordLayer)
+        internal DtlsSession(IPEndPoint ipEndPoint, DtlsRecordLayer recordLayer)
         {
             _packetLayer = new PacketLayer(this);
             _handshake = new DtlsHandshake(_packetLayer, this);
@@ -32,6 +34,7 @@ namespace Stormancer.Dtls
             _epochs[0] = new Epoch();
             RemoteEndpoint = ipEndPoint;
             this.recordLayer = recordLayer;
+            this.logger = logger;
         }
 
         public DtlsSessionConfiguration SessionConfiguration { get; set; } = new DtlsSessionConfiguration();
@@ -94,110 +97,9 @@ namespace Stormancer.Dtls
             return _handshake.PerformAsync(cancellationToken);
         }
 
-
-        /// <summary>
-        /// Reconstructs the record number from <see cref="DtlsPlainTextHeader"/>
-        /// </summary>
-        /// <remarks>
-        /// https://tlswg.org/dtls13-spec/draft-ietf-tls-dtls13.html#name-reconstructing-the-sequence
-        /// </remarks>
-        /// <param name=""></param>
-        /// <returns></returns>
-        bool TryReconstructRecordNumber(in DtlsPlainTextHeader header, out DtlsRecordNumber output, [NotNullWhen(true)] out Epoch? epoch)
+        internal void OnAlertReceived(DtlsAlert alert)
         {
-            var number = header.Number;
-            if ((ushort)CurrentEpoch.EpochId == number.Epoch)
-            {
-                output = new DtlsRecordNumber(CurrentEpoch.EpochId, number.SequenceNumber);
-                epoch = CurrentEpoch;
-                return true;
-            }
-            else if (Phase == DtlsConnectionPhase.Active)
-            {
-                foreach (var e in Epochs)
-                {
-                    if ((ushort)e.EpochId == number.Epoch)
-                    {
-                        output = new DtlsRecordNumber(e.EpochId, number.SequenceNumber);
-                        epoch = e;
-                        return true;
-                    }
-                }
 
-                output = default;
-                epoch = default;
-                return false;
-
-            }
-            else
-            {
-                //We are in the handshake phase, the Epoch bits should unambiguously indicate the current epoch.
-                output = default;
-                epoch = default;
-                return false;
-            }
-        }
-
-        bool TryReconstructRecordNumber(in DtlsUnifiedHeader header, out DtlsRecordNumber output, [NotNullWhen(true)] out Epoch? epoch)
-        {
-            if ((byte)CurrentEpoch.EpochId == header.Epoch)
-            {
-                ulong sequenceNumber = header.SequenceNumberLength ?
-                    (CurrentEpoch.LatestDeprotectedSequenceNumber & 0x_ffffffff_ffff0000) | header.SequenceNumber :
-                     (CurrentEpoch.LatestDeprotectedSequenceNumber & 0x_ffffffff_ffffff00) | header.SequenceNumber;
-
-                output = new DtlsRecordNumber(CurrentEpoch.EpochId, sequenceNumber);
-                epoch = CurrentEpoch;
-                return true;
-            }
-            else if (Phase == DtlsConnectionPhase.Active)
-            {
-                foreach (var e in Epochs)
-                {
-                    if ((byte)e.EpochId == header.Epoch)
-                    {
-                        ulong sequenceNumber = header.SequenceNumberLength ?
-                            (e.LatestDeprotectedSequenceNumber & 0x_ffffffff_ffff0000) | header.SequenceNumber :
-                            (e.LatestDeprotectedSequenceNumber & 0x_ffffffff_ffffff00) | header.SequenceNumber;
-
-                        output = new DtlsRecordNumber(e.EpochId, sequenceNumber);
-                        epoch = e;
-                        return true;
-                    }
-                }
-
-                output = default;
-                epoch = default;
-                return false;
-
-            }
-            else
-            {
-                //We are in the handshake phase, the Epoch bits should unambiguously indicate the current epoch.
-                output = default;
-                epoch = default;
-                return false;
-            }
-        }
-
-
-
-        internal void HandleCipherTextRecord(ref DtlsUnifiedHeader header, ReadOnlySpan<byte> content)
-        {
-            if (TryReconstructRecordNumber(header, out var number, out var epoch))
-            {
-
-            }
-        }
-
-        internal int TryHandlePlainTextRecord(in DtlsPlainTextHeader header, in DtlsHandshakeHeader handshakeHeader, in ReadOnlySpan<byte> content)
-        {
-            if (TryReconstructRecordNumber(header, out var number, out var epoch))
-            {
-
-            }
-
-            throw new NotImplementedException();
         }
     }
    

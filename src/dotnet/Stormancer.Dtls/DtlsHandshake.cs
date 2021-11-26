@@ -123,4 +123,13 @@ namespace Stormancer.Dtls
             };
         }
     }
+
+
+    internal class HandshakeController
+    {
+        public bool TryHandleHandshakeRecord(DtlsSession? session, DtlsRecordNumber recordNumber, Epoch? epoch, ReadOnlySpan<byte> buffer, out int read)
+        {
+
+        }
+    }
 }
