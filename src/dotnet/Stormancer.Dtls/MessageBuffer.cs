@@ -9,13 +9,13 @@ using System.Threading.Tasks;
 
 namespace Stormancer.Dtls
 {
-    internal class DtlsMessageBuffer
+    internal class DtlsHandshakeFragmentReassembler
     {
         
         private Dictionary<IPEndPoint, MessageBuffer> _buffer = new Dictionary<IPEndPoint, MessageBuffer>();
 
         private object _syncRoot = new object();
-        public bool TryGetCompleteOrAddPartial(IPEndPoint ipEndpoint, int fragmentOffset, int totalLength, ReadOnlySpan<byte> content)
+        public bool TryGetCompleteOrAddPartial(IPEndPoint ipEndpoint, int fragmentOffset, int totalLength, ReadOnlySpan<byte> fragment, out ReadOnlyMemory<byte> content)
         {
             bool mustAdd = false;
             MessageBuffer buffer;
@@ -48,7 +48,10 @@ namespace Stormancer.Dtls
 
             }
 
-            public List<>
+
+            public int FirstHoleIndex { get; private set; } = 0;
+
+            public bool IsComplete => FirstHoleIndex >= 0;
 
             public Memory<byte> Data => _owner.Memory;
 

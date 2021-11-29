@@ -78,16 +78,36 @@ namespace Stormancer.Dtls
             Length = length;
         }
 
-        public static int TryReadHeader(ReadOnlySpan<byte> span, out DtlsUnifiedHeader header)
+        public static bool TryReadHeader(ReadOnlySpan<byte> span, out DtlsUnifiedHeader header, out int read)
         {
+            if (span.Length < 2)
+            {
+                read = 0;
+                header = default;
+                return false;
+            }
+
             var headerStructure = span[0];
             var offset = 1;
             ushort sequenceNumber;
             var sequenceNumberLength = (headerStructure & 0b_0000_1000) != 0;
+            var lengthPresent = (headerStructure & 0b_0000_0100) != 0;
+
+
+
             if (sequenceNumberLength)
             {
+
+                if (span.Length < 3)
+                {
+                    read = 0;
+                    header = default;
+                    return false;
+                }
+
                 sequenceNumber = BinaryPrimitives.ReadUInt16BigEndian(span.Slice(offset));
                 offset += 2;
+
             }
             else
             {
@@ -95,10 +115,16 @@ namespace Stormancer.Dtls
                 offset += 1;
             }
 
-            var lengthPresent = (headerStructure & 0b_0000_0100) != 0;
+
             ushort length;
             if (lengthPresent)
             {
+                if (span.Length < offset + 2)
+                {
+                    read = 0;
+                    header = default;
+                    return false;
+                }
                 length = BinaryPrimitives.ReadUInt16BigEndian(span.Slice(offset));
                 offset += 2;
             }
@@ -109,10 +135,11 @@ namespace Stormancer.Dtls
 
             ushort epoch = (ushort)(headerStructure & 0b_0000_0011);
             header = new DtlsUnifiedHeader(sequenceNumberLength, sequenceNumber, lengthPresent, length, epoch);
-            return offset;
+            read = offset;
+            return true;
         }
 
-        public int TryWriteHeader(Span<byte> span)
+        public bool TryWriteHeader(Span<byte> span, out int written)
         {
             span[0] = HeaderStructure;
             int offset = 1;
@@ -132,7 +159,8 @@ namespace Stormancer.Dtls
                 BinaryPrimitives.WriteUInt16BigEndian(span.Slice(offset), Length);
                 offset += 2;
             }
-            return offset;
+            written = offset;
+            return true;
         }
 
 
@@ -167,7 +195,8 @@ namespace Stormancer.Dtls
             if (span.Length < 13)
             {
                 header = default;
-                return 0;
+                read = 0;
+                return false;
             }
 
             var type = (ContentType)span[0];
@@ -175,19 +204,22 @@ namespace Stormancer.Dtls
             if (targetProtocolVersion != new Vector<byte>(span.Slice(1, 2)))
             {
                 header = default;
-                return 0;
+                read = 0;
+                return false;
             }
-            var read = DtlsPlainTextRecordNumber.TryRead(span.Slice(3, 8), out var number);
-            if (read == 0)
+            
+            if (!DtlsPlainTextRecordNumber.TryRead(span.Slice(3, 8), out var number, out var bytesRead))
             {
                 header = default;
-                return 0;
+                read = 0;
+                return false;
             }
-
-            var length = BinaryPrimitives.ReadUInt16BigEndian(span.Slice(read + 3, 2));
+            
+            var length = BinaryPrimitives.ReadUInt16BigEndian(span.Slice(bytesRead + 3, 2));
 
             header = new DtlsPlainTextHeader(type, number, length);
-            return 13;
+            read = 13;
+            return true;
         }
 
         public ContentType Type { get; }
@@ -207,7 +239,10 @@ namespace Stormancer.Dtls
             span[0] = (byte)Type;
             span[1] = ProtocolVersion[0];
             span[2] = ProtocolVersion[1];
-            Number.TryWrite(span.Slice(3, 8));
+            Number.TryWrite(span.Slice(3, 8), out int written);
+
+            Debug.Assert(written + 5 == 13);
+
             BinaryPrimitives.WriteUInt16BigEndian(span.Slice(11, 2), Length);
 
             return 13;
@@ -226,50 +261,55 @@ namespace Stormancer.Dtls
             SequenceNumber = sequenceNumber;
         }
 
-        public static int TryRead(ReadOnlySpan<byte> buffer, out DtlsPlainTextRecordNumber number)
+        public static bool TryRead(ReadOnlySpan<byte> buffer, out DtlsPlainTextRecordNumber number, out int read)
         {
             if (buffer.Length < 8)
             {
                 number = default;
-                return 0;
+                read = 0;
+                return false;
             }
             var epoch = BinaryPrimitives.ReadUInt16BigEndian(buffer);
 
-            if(buffer.TryReadUint48(out var sequenceNumber) != 6)
+            if (!SpanHelpers.TryReadUint48(buffer,out var sequenceNumber, out _))
             {
                 number = default;
-                return -1;
+                read = 0;
+                return false;
             }
 
-           
-
             number = new DtlsPlainTextRecordNumber(epoch, sequenceNumber);
-            return 8;
+            read = 8;
+            return true;
         }
 
 
 
-        public int TryWrite(Span<byte> buffer)
+        public bool TryWrite(Span<byte> buffer,out int written)
         {
             if (buffer.Length < 8)
             {
-                return 0;
+                written = 0;
+                return false;
             }
             var epoch = Epoch;
             var sequenceNumber = SequenceNumber;
 
-            if(!BinaryPrimitives.TryWriteUInt16BigEndian(buffer, epoch))
+            if (!BinaryPrimitives.TryWriteUInt16BigEndian(buffer, epoch))
             {
-                return 0;
+                written = 0;
+                return false;
             }
 
-            if(SpanHelpers.TryWriteUint48(buffer.Slice(2), sequenceNumber) != 6)
+            if (SpanHelpers.TryWriteUint48(buffer.Slice(2), sequenceNumber, out _))
             {
-                return 0;
+                written = 0;
+                return false;
             }
-          
-            return 8;
+            written = 8;
+            return true;
         }
+
         /// <summary>
         /// The epoch changes on key renegotiation.
         /// </summary>

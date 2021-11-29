@@ -4,6 +4,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -127,9 +128,38 @@ namespace Stormancer.Dtls
 
     internal class HandshakeController
     {
-        public bool TryHandleHandshakeRecord(DtlsSession? session, DtlsRecordNumber recordNumber, Epoch? epoch, ReadOnlySpan<byte> buffer, out int read)
+        private DtlsHandshakeFragmentReassembler _buffer = new DtlsHandshakeFragmentReassembler();
+        public bool TryHandleHandshakeRecord(IPEndPoint origin, DtlsSession? session, DtlsRecordNumber recordNumber, Epoch? epoch, ReadOnlySpan<byte> buffer, out int read)
         {
+            //We assemble fragments even without session association, because initial HelloClient > ServerHello exchange is stateless.
 
+            if(!DtlsHandshakeHeader.TryRead(buffer, out var handshakeHeader, out var bytesRead))
+            {
+                read = 0;
+                return false;
+            }
+
+            if (!ValidateHeader(session, handshakeHeader))
+            {
+                read = 0;
+                return false;
+            }
+
+            
+            if(handshakeHeader.IsSingleFragmentMessage || _buffer.TryGetCompleteOrAddPartial(origin, handshakeHeader.FragmentOffset, handshakeHeader.Length, buffer, out var content))
+
+            return true;
+
+        }
+
+        private bool ValidateHeader(DtlsSession? session, DtlsHandshakeHeader header)
+        {
+            if(header.MsgType != HandshakeType.client_hello && session == null)
+            {
+                return false;
+            }
+
+            return true;
         }
     }
 }

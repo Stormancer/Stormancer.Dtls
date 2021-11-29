@@ -34,7 +34,7 @@ namespace Stormancer.Dtls
     {
 
 
-        private SessionManager sessionManager;
+        private Sessions sessions;
         private readonly ChannelReader<Datagram> reader;
         private readonly ChannelWriter<Datagram> writer;
 
@@ -42,11 +42,11 @@ namespace Stormancer.Dtls
         private AlertController alertController = new AlertController();
         private HandshakeController handshakeController = new HandshakeController();
 
-      
 
-        public DtlsRecordLayer(SessionManager sessionManager, ChannelReader<Datagram> reader, ChannelWriter<Datagram> writer)
+
+        public DtlsRecordLayer(Sessions sessionManager, ChannelReader<Datagram> reader, ChannelWriter<Datagram> writer)
         {
-            this.sessionManager = sessionManager;
+            this.sessions = sessionManager;
             this.reader = reader;
             this.writer = writer;
         }
@@ -86,7 +86,7 @@ namespace Stormancer.Dtls
                         }
                     case DtlsRecordType.CipherText:
                         {
-                            read = HandleCipherTextRecord(span, datagram.RemoteEndpoint);
+                            success = TryHandleCipherTextRecord(span, datagram.RemoteEndpoint, out read);
 
                             break;
                         }
@@ -133,10 +133,8 @@ namespace Stormancer.Dtls
                 return false;
             }
             DtlsSession? session;
-            lock (_connectionsSyncRoot)
-            {
-                _connections.TryGetValue(remoteEndpoint, out session);
-            }
+            sessions.TryGetSession(remoteEndpoint, out session);
+
 
             if (DtlsRecordNumber.TryReconstructRecordNumber(recordHeader, session?.Epochs, out var recordNumber, out var epoch))
             {
@@ -149,7 +147,7 @@ namespace Stormancer.Dtls
                     {
                         ContentType.ChangeCipherSpec => false, // DTLS1.2
                         ContentType.Alert => alertController.TryHandleAlertRecord(session, recordNumber, epoch, span.Slice(read, recordHeader.Length), out recordRead),
-                        ContentType.Handshake => handshakeController.TryHandleHandshakeRecord(session, recordNumber, epoch, span.Slice(read, recordHeader.Length), out recordRead),
+                        ContentType.Handshake => handshakeController.TryHandleHandshakeRecord(remoteEndpoint, session,recordNumber,epoch,span.Slice(read,recordHeader.Length),out recordRead),
                         ContentType.ApplicationData => false, //DTLS1.2
                         ContentType.Heartbeat => false, //No plaintext heartbeat in DTLS1.3
                         ContentType.Tls12Cid => false, // DTL1.2 not supported,
@@ -168,64 +166,32 @@ namespace Stormancer.Dtls
 
         }
 
-        private bool TryHandleRecordFragment(IPEndPoint remoteEndpoint, in DtlsPlainTextHeader recordHeader, in DtlsHandshakeHeader handshakeHeader, in ReadOnlySpan<byte> content)
+       
+
+        private bool TryHandleCipherTextRecord(ReadOnlySpan<byte> span, IPEndPoint remoteEndpoint, out int read)
         {
-            if (handshakeHeader.FragmentLength > DtlsConstants.MAX_FRAGMENT_LENGTH)
+
+
+            if (DtlsUnifiedHeader.TryReadHeader(span, out var header, out var headerLength))
             {
-                return false;
-            }
-            if (handshakeHeader.FragmentLength + handshakeHeader.FragmentLength > handshakeHeader.Length) //Invalid fragment length/offset
-            {
-                return false;
-            }
-
-            if (handshakeHeader.Length > DtlsConstants.MAX_HANDSHAKE_MSG_LENGTH)
-            {
-                return false;
-            }
+                var content = span.Slice(headerLength, header.Length);
 
 
-            if (TryGetCompleteMessage(remoteEndpoint, recordHeader, handshakeHeader, content, out var))
-            {
 
-            }
-        }
-
-
-        private bool TryGetCompleteMessage(IPEndPoint remoteEndpoint, in DtlsPlainTextHeader recordHeader, in DtlsHandshakeHeader handshakeHeader, in ReadOnlySpan<byte> content, out ReadOnlySpan<byte> fullContent)
-        {
-            if (handshakeHeader.IsSingleFragmentMessage)
-            {
-                fullContent = content;
-            }
-            else//buffer
-            {
-
-            }
-        }
-
-
-        private int HandleCipherTextRecord(ReadOnlySpan<byte> span, IPEndPoint remoteEndpoint)
-        {
-            var read = DtlsUnifiedHeader.TryReadHeader(span, out var header);
-
-            if (read != 0)
-            {
-                var content = span.Slice(read, header.Length);
-
-                lock (_connectionsSyncRoot)
+                if (sessions.TryGetSession(remoteEndpoint, out var session))
                 {
-                    if (_connections.TryGetValue(remoteEndpoint, out var connection))
-                    {
-                        connection.HandleCipherTextRecord(ref header, content);
-                    }
+
+                    throw new NotImplementedException();
                 }
 
-                return read + header.Length;
+
+                read = headerLength + header.Length;
+                return true;
             }
             else
             {
-                return 0;
+                read = 0;
+                return false;
             }
         }
 
