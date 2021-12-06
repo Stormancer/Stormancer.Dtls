@@ -33,24 +33,7 @@ namespace Stormancer.Dtls
             throw new NotImplementedException();
         }
 
-        public ushort LocalPort { get; }
-
-        public async Task RunAsync(CancellationToken cancellationToken)
-        {
-            try
-            {
-                await Task.WhenAll(
-                    _dtlsRecordLayer.RunAsync(cancellationToken),
-                    RunReceiver(cancellationToken),
-                    RunSender(cancellationToken)
-                    );
-
-            }
-            finally
-            {
-                _dtlsRecordLayer.ReceiveWriter.Complete();
-            }
-        }
+       
 
         public void Dispose()
         {

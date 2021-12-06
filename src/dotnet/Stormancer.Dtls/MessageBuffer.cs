@@ -51,7 +51,7 @@ namespace Stormancer.Dtls
 
             public int FirstHoleIndex { get; private set; } = 0;
 
-            public bool IsComplete => FirstHoleIndex >= 0;
+            public bool IsComplete =>  FirstHoleIndex >= 0;
 
             public Memory<byte> Data => _owner.Memory;
 
